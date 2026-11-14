@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<title>Homework Tracker</title>
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --text: #1f2330; --muted: #6b7180;
+    --line: #e4e6ee; --accent: #4f46e5; --accent-ink: #fff;
+    --late: #dc2626; --soon: #d97706; --ok: #059669;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12141a; --card: #1b1e27; --text: #e8eaf0; --muted: #9aa0ae;
+      --line: #2b2f3b; --accent: #818cf8; --accent-ink: #12141a;
+      --late: #f87171; --soon: #fbbf24; --ok: #34d399;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg);
+    padding: 16px 16px 8px; border-bottom: 1px solid var(--line); }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .summary { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  button { border: 1px solid var(--line); background: var(--card); border-radius: 10px;
+    padding: 8px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.link { border: none; background: none; color: var(--muted); padding: 4px 6px; }
+  select, input, textarea { background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 10px; }
+  main { padding: 8px 16px 80px; }
+  section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 22px 0 8px; }
+  section h2.late { color: var(--late); }
+  .item { display: flex; gap: 12px; align-items: flex-start; background: var(--card);
+    border: 1px solid var(--line); border-left: 5px solid var(--c, var(--accent));
+    border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+  .item input[type=checkbox] { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--ok); flex: none; }
+  .item .body { flex: 1; min-width: 0; }
+  .item .title { font-weight: 600; word-wrap: break-word; }
+  .item.done .title { text-decoration: line-through; color: var(--muted); font-weight: 400; }
+  .item .meta { font-size: 13px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+  .item .due.late { color: var(--late); font-weight: 600; }
+  .item .due.soon { color: var(--soon); font-weight: 600; }
+  .item .notes { font-size: 14px; color: var(--muted); margin-top: 4px; white-space: pre-wrap; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 16px; }
+  dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--card);
+    color: var(--text); width: min(680px, calc(100vw - 32px)); padding: 0; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  .dlg { padding: 18px; }
+  .dlg h3 { margin: 0 0 10px; }
+  .dlg label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  .dlg input, .dlg textarea, .dlg select { width: 100%; }
+  .dlg .row { display: flex; gap: 10px; }
+  .dlg .row > div { flex: 1; }
+  .dlg .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .hint { font-size: 13px; color: var(--muted); }
+  .preview { max-height: 45vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; margin-top: 10px; }
+  .preview table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .preview td, .preview th { padding: 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .preview input[type=text], .preview input[type=date] { width: 100%; padding: 4px 6px; border-radius: 6px; }
+  .preview tr.dupe { opacity: .45; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px;
+    font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>📚 Homework</h1>
+    <div class="summary" id="summary"></div>
+    <div class="toolbar">
+      <button class="primary" id="btnAdd">+ Add</button>
+      <button id="btnImport">⬇ Import from Campus</button>
+      <select id="filterCourse" aria-label="Filter by class"><option value="">All classes</option></select>
+      <label class="hint"><input type="checkbox" id="showDone"> Show done</label>
+      <button class="link" id="btnMore">⋯</button>
+    </div>
+  </div>
+</header>
+
+<main><div class="wrap" id="list"></div></main>
+
+<!-- Add / edit -->
+<dialog id="dlgEdit"><form method="dialog" class="dlg" id="formEdit">
+  <h3 id="editTitle">Add assignment</h3>
+  <label for="fTitle">Assignment</label>
+  <input id="fTitle" required placeholder="e.g. Ch. 5 reading questions">
+  <div class="row">
+    <div><label for="fCourse">Class</label><input id="fCourse" list="courseList" placeholder="e.g. Biology"></div>
+    <div><label for="fDue">Due date</label><input id="fDue" type="date" required></div>
+  </div>
+  <label for="fNotes">Notes (optional)</label>
+  <textarea id="fNotes" rows="3"></textarea>
+  <div class="actions">
+    <button type="button" class="link" id="btnDelete" style="margin-right:auto;color:var(--late)">Delete</button>
+    <button value="cancel" formnovalidate>Cancel</button>
+    <button class="primary" value="save">Save</button>
+  </div>
+</form></dialog>
+<datalist id="courseList"></datalist>
+
+<!-- Import -->
+<dialog id="dlgImport"><div class="dlg">
+  <h3>Import from Campus</h3>
+  <p class="hint">In the Campus app or website, open your assignments (the <b>Today</b> or <b>Grades</b> view),
+    select the list, copy it, and paste it below. You can also paste a CSV with
+    <code>class, assignment, due</code> columns. You'll check everything before it's added, and anything you
+    already have is skipped.</p>
+  <textarea id="pasteBox" rows="7" placeholder="Paste here…"></textarea>
+  <div class="actions" style="justify-content:flex-start">
+    <button id="btnParse">Preview</button>
+    <span class="hint" id="parseInfo"></span>
+  </div>
+  <div class="preview" id="preview" hidden></div>
+  <div class="actions">
+    <button id="btnImportCancel">Cancel</button>
+    <button class="primary" id="btnImportGo" disabled>Add selected</button>
+  </div>
+</div></dialog>
+
+<!-- More -->
+<dialog id="dlgMore"><div class="dlg">
+  <h3>More</h3>
+  <p class="hint">Your homework is saved only in this browser. Make a backup now and then, especially before
+    switching phones.</p>
+  <div class="actions" style="justify-content:flex-start;flex-wrap:wrap">
+    <button id="btnExport">Save backup file</button>
+    <button id="btnRestore">Restore from backup</button>
+    <button id="btnClearDone">Delete done items older than 2 weeks</button>
+    <input type="file" id="fileRestore" accept="application/json" hidden>
+  </div>
+  <div class="actions"><button id="btnMoreClose">Close</button></div>
+</div></dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const KEY = 'hw-tracker-v1';
+  const COLORS = ['#4f46e5','#0891b2','#059669','#d97706','#db2777','#7c3aed','#dc2626','#65a30d','#0284c7','#c026d3'];
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- storage ----------
+  let state = load();
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && Array.isArray(s.items)) return s;
+    } catch {}
+    return { items: [], courseColors: {} };
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch { toast('Could not save. Is private browsing on?'); }
+  }
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // ---------- dates ----------
+  const pad = (n) => String(n).padStart(2, '0');
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+  const fromIso = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const dayDiff = (s) => Math.round((fromIso(s) - today()) / 86400000);
+  function dueLabel(s) {
+    const n = dayDiff(s);
+    if (n === 0) return 'Due today';
+    if (n === 1) return 'Due tomorrow';
+    if (n === -1) return 'Was due yesterday';
+    if (n < 0) return `${-n} days late`;
+    const d = fromIso(s);
+    const opts = n < 7 ? { weekday: 'long' } : { weekday: 'short', month: 'short', day: 'numeric' };
+    return 'Due ' + d.toLocaleDateString(undefined, opts);
+  }
+
+  // ---------- helpers ----------
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const norm = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const keyOf = (it) => `${norm(it.course)}|${norm(it.title)}|${it.due}`;
+  function colorFor(course) {
+    if (!course) return 'var(--accent)';
+    if (!state.courseColors[course]) {
+      const used = Object.keys(state.courseColors).length;
+      state.courseColors[course] = COLORS[used % COLORS.length];
+    }
+    return state.courseColors[course];
+  }
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  const courses = () => [...new Set(state.items.map((i) => i.course).filter(Boolean))].sort();
+
+  // ---------- render ----------
+  function render() {
+    const filter = $('filterCourse').value;
+    const showDone = $('showDone').checked;
+    const items = state.items
+      .filter((i) => !filter || i.course === filter)
+      .sort((a, b) => a.due.localeCompare(b.due) || norm(a.course).localeCompare(norm(b.course)));
+
+    const open = items.filter((i) => !i.done);
+    const groups = [
+      ['Overdue', open.filter((i) => dayDiff(i.due) < 0), 'late'],
+      ['Today', open.filter((i) => dayDiff(i.due) === 0)],
+      ['Tomorrow', open.filter((i) => dayDiff(i.due) === 1)],
+      ['This week', open.filter((i) => dayDiff(i.due) >= 2 && dayDiff(i.due) <= 7)],
+      ['Later', open.filter((i) => dayDiff(i.due) > 7)],
+    ];
+    if (showDone) groups.push(['Done', items.filter((i) => i.done).reverse()]);
+
+    const all = state.items.filter((i) => !i.done);
+    const late = all.filter((i) => dayDiff(i.due) < 0).length;
+    const soon = all.filter((i) => dayDiff(i.due) >= 0 && dayDiff(i.due) <= 1).length;
+    $('summary').textContent = all.length
+      ? `${all.length} to do · ${soon} due today/tomorrow` + (late ? ` · ${late} overdue` : '')
+      : 'All caught up 🎉';
+
+    const html = groups.filter(([, list]) => list.length).map(([name, list, cls]) => `
+      <section><h2 class="${cls || ''}">${name} (${list.length})</h2>
+      ${list.map(itemHtml).join('')}</section>`).join('');
+    $('list').innerHTML = html || `<div class="empty">Nothing here yet.<br>Tap <b>Import from Campus</b> or <b>+ Add</b> to get started.</div>`;
+
+    // course filter + datalist
+    const cs = courses();
+    $('filterCourse').innerHTML = '<option value="">All classes</option>' +
+      cs.map((c) => `<option ${c === filter ? 'selected' : ''}>${esc(c)}</option>`).join('');
+    $('courseList').innerHTML = cs.map((c) => `<option value="${esc(c)}">`).join('');
+  }
+  function itemHtml(i) {
+    const n = dayDiff(i.due);
+    const cls = i.done ? '' : n < 0 ? 'late' : n <= 1 ? 'soon' : '';
+    return `<div class="item ${i.done ? 'done' : ''}" style="--c:${colorFor(i.course)}" data-id="${i.id}">
+      <input type="checkbox" ${i.done ? 'checked' : ''} aria-label="Mark done">
+      <div class="body" role="button" tabindex="0">
+        <div class="title">${esc(i.title)}</div>
+        <div class="meta">${i.course ? `<span>${esc(i.course)}</span>` : ''}
+          <span class="due ${cls}">${i.done ? 'Done' : dueLabel(i.due)}</span></div>
+        ${i.notes ? `<div class="notes">${esc(i.notes)}</div>` : ''}
+      </div></div>`;
+  }
+
+  $('list').addEventListener('click', (e) => {
+    const row = e.target.closest('.item'); if (!row) return;
+    const it = state.items.find((i) => i.id === row.dataset.id); if (!it) return;
+    if (e.target.matches('input[type=checkbox]')) {
+      it.done = e.target.checked; it.doneAt = it.done ? Date.now() : null;
+      save(); setTimeout(render, it.done ? 350 : 0);
+      if (it.done) toast('Nice! ✅');
+    } else if (e.target.closest('.body')) openEdit(it);
+  });
+  $('filterCourse').onchange = render;
+  $('showDone').onchange = render;
+
+  // ---------- add / edit ----------
+  let editing = null;
+  function openEdit(it) {
+    editing = it || null;
+    $('editTitle').textContent = it ? 'Edit assignment' : 'Add assignment';
+    $('fTitle').value = it?.title || '';
+    $('fCourse').value = it?.course || $('filterCourse').value || '';
+    $('fDue').value = it?.due || iso(new Date(today().getTime() + 86400000));
+    $('fNotes').value = it?.notes || '';
+    $('btnDelete').hidden = !it;
+    $('dlgEdit').showModal();
+  }
+  $('btnAdd').onclick = () => openEdit(null);
+  $('formEdit').addEventListener('submit', (e) => {
+    if (e.submitter?.value !== 'save') return;
+    const data = { title: $('fTitle').value.trim(), course: $('fCourse').value.trim(),
+      due: $('fDue').value, notes: $('fNotes').value.trim() };
+    if (editing) Object.assign(editing, data);
+    else state.items.push({ id: uid(), done: false, source: 'manual', ...data });
+    save(); render();
+  });
+  $('btnDelete').onclick = () => {
+    if (editing && confirm('Delete this assignment?')) {
+      state.items = state.items.filter((i) => i !== editing);
+      save(); render(); $('dlgEdit').close();
+    }
+  };
+
+  // ---------- import parsing ----------
+  const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
+  const WD = '(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*\\.?,?\\s*';
+  const RE_NUM = new RegExp(`(?:${WD})?\\b(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?\\b`, 'i');
+  const RE_ISO = /\b(\d{4})-(\d{2})-(\d{2})\b/;
+  const RE_TXT = new RegExp(`(?:${WD})?\\b(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?`, 'i');
+  const RE_REL = /\b(today|tomorrow)\b/i;
+
+  // Without a year, pick the date closest to today (handles Dec→Jan rollover).
+  function guessYear(m, d) {
+    const t = today(); let best = null;
+    for (const y of [t.getFullYear() - 1, t.getFullYear(), t.getFullYear() + 1]) {
+      const c = new Date(y, m, d);
+      if (!best || Math.abs(c - t) < Math.abs(best - t)) best = c;
+    }
+    return best;
+  }
+  function findDate(line) {
+    let m;
+    if ((m = line.match(RE_ISO))) return { date: iso(new Date(+m[1], +m[2] - 1, +m[3])), match: m[0] };
+    if ((m = line.match(RE_NUM))) {
+      const mo = +m[1] - 1, d = +m[2];
+      if (mo < 0 || mo > 11 || d < 1 || d > 31) return null;
+      let y = m[3] ? +m[3] : null; if (y && y < 100) y += 2000;
+      return { date: iso(y ? new Date(y, mo, d) : guessYear(mo, d)), match: m[0] };
+    }
+    if ((m = line.match(RE_TXT))) {
+      const mo = MONTHS[m[1].toLowerCase()], d = +m[2];
+      return { date: iso(m[3] ? new Date(+m[3], mo, d) : guessYear(mo, d)), match: m[0] };
+    }
+    if ((m = line.match(RE_REL))) {
+      const t = today(); if (/tomorrow/i.test(m[1])) t.setDate(t.getDate() + 1);
+      return { date: iso(t), match: m[0] };
+    }
+    return null;
+  }
+  // Lines from grade views that aren't assignment names.
+  const NOISE = /^(score|points?|pts|grade|missing|late|turned in|incomplete|exempt|dropped|assigned|in progress|percent|weight|category|comments?|flags?|term \w+|q\d|s\d|-+|\d+(\.\d+)?%?|\d+(\.\d+)?\s*\/\s*\d+(\.\d+)?.*|[A-F][+-]?)$/i;
+  const cleanTitle = (s) => s
+    .replace(/\b(due( date)?|assigned)\s*[:\-]?\s*/gi, '')
+    .replace(/\b\d{1,2}:\d{2}\s*(am|pm)?\b/gi, '')
+    .replace(/\b(at|by|on)\s*$/i, '')
+    .replace(/^[\s\-–—:|•·,]+|[\s\-–—:|•·,]+$/g, '').trim();
+
+  function parseCsv(text) {
+    const delim = text.includes('\t') ? '\t' : ',';
+    const rows = text.trim().split(/\r?\n/).map((l) => splitRow(l, delim));
+    const head = rows[0].map(norm);
+    const col = (...names) => head.findIndex((h) => names.some((n) => h.includes(n)));
+    const ti = col('assignment', 'title', 'name', 'task'), di = col('due', 'date'), ci = col('class', 'course', 'subject');
+    if (ti < 0 || di < 0) return null;
+    return rows.slice(1).map((r) => {
+      const fd = findDate(r[di] || '');
+      return fd && r[ti] ? { title: r[ti].trim(), course: ci >= 0 ? (r[ci] || '').trim() : '', due: fd.date } : null;
+    }).filter(Boolean);
+  }
+  function splitRow(line, d) {
+    if (d === '\t') return line.split('\t');
+    const out = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+      else if (c === d && !q) { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur); return out;
+  }
+
+  // Free text pasted from Campus. Lines are either class headings, assignment
+  // names, dates, or grade noise. A date attaches to the line it's on, or to
+  // the nearest assignment name above it; the line before that is the class.
+  function parseText(text) {
+    const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const out = []; let course = ''; let pending = [];
+    for (const raw of lines) {
+      const fd = findDate(raw);
+      if (!fd) { if (!NOISE.test(raw)) pending.push(raw); continue; }
+      let rest = cleanTitle(raw.replace(fd.match, ' '));
+      // "Biology: Lab report" / "Biology - Lab report" on one line
+      let lineCourse = '';
+      const parts = rest.split(/\s+[|–—-]\s+|:\s+/);
+      if (parts.length >= 2 && parts[0].length <= 40) { lineCourse = parts[0]; rest = parts.slice(1).join(' - '); }
+      let title = rest && !NOISE.test(rest) ? rest : '';
+      if (!title && pending.length) title = pending.pop();
+      if (pending.length) course = pending[pending.length - 1];
+      pending = [];
+      if (title) out.push({ title: cleanTitle(title), course: (lineCourse || course).replace(/^\d+\s+/, ''), due: fd.date });
+    }
+    return out;
+  }
+
+  let parsed = [];
+  $('btnImport').onclick = () => {
+    $('pasteBox').value = ''; $('preview').hidden = true; $('parseInfo').textContent = '';
+    $('btnImportGo').disabled = true; $('dlgImport').showModal(); $('pasteBox').focus();
+  };
+  $('btnImportCancel').onclick = () => $('dlgImport').close();
+  $('btnParse').onclick = () => {
+    const text = $('pasteBox').value;
+    const firstLine = text.trim().split(/\r?\n/)[0] || '';
+    parsed = ((/[,\t]/.test(firstLine) && parseCsv(text)) || parseText(text));
+    const have = new Set(state.items.map(keyOf));
+    parsed.forEach((p) => { p.dupe = have.has(keyOf(p)); p.pick = !p.dupe; });
+    const fresh = parsed.filter((p) => !p.dupe).length;
+    $('parseInfo').textContent = parsed.length
+      ? `Found ${parsed.length} · ${fresh} new · ${parsed.length - fresh} already added`
+      : 'No assignments with due dates found. Try copying a bit more of the page.';
+    renderPreview();
+  };
+  function renderPreview() {
+    const p = $('preview'); p.hidden = !parsed.length;
+    p.innerHTML = `<table><thead><tr><th></th><th>Class</th><th>Assignment</th><th>Due</th></tr></thead><tbody>
+      ${parsed.map((r, i) => `<tr class="${r.dupe ? 'dupe' : ''}" data-i="${i}">
+        <td><input type="checkbox" data-f="pick" ${r.pick ? 'checked' : ''}></td>
+        <td><input type="text" data-f="course" value="${esc(r.course)}" list="courseList"></td>
+        <td><input type="text" data-f="title" value="${esc(r.title)}"></td>
+        <td><input type="date" data-f="due" value="${r.due}"></td></tr>`).join('')}
+      </tbody></table>`;
+    syncImportBtn();
+  }
+  $('preview').addEventListener('input', (e) => {
+    const i = e.target.closest('tr')?.dataset.i; const f = e.target.dataset.f;
+    if (i == null || !f) return;
+    parsed[i][f] = f === 'pick' ? e.target.checked : e.target.value;
+    syncImportBtn();
+  });
+  function syncImportBtn() {
+    const n = parsed.filter((p) => p.pick && p.title && p.due).length;
+    $('btnImportGo').disabled = !n; $('btnImportGo').textContent = n ? `Add ${n}` : 'Add selected';
+  }
+  $('btnImportGo').onclick = () => {
+    const have = new Set(state.items.map(keyOf));
+    let added = 0;
+    for (const p of parsed) {
+      if (!p.pick || !p.title || !p.due) continue;
+      const it = { id: uid(), title: p.title.trim(), course: p.course.trim(), due: p.due, notes: '', done: false, source: 'campus' };
+      if (have.has(keyOf(it))) continue;
+      have.add(keyOf(it)); state.items.push(it); added++;
+    }
+    save(); render(); $('dlgImport').close();
+    toast(`Added ${added} assignment${added === 1 ? '' : 's'}`);
+  };
+
+  // ---------- more ----------
+  $('btnMore').onclick = () => $('dlgMore').showModal();
+  $('btnMoreClose').onclick = () => $('dlgMore').close();
+  $('btnExport').onclick = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `homework-backup-${iso(new Date())}.json`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  $('btnRestore').onclick = () => $('fileRestore').click();
+  $('fileRestore').onchange = async (e) => {
+    try {
+      const s = JSON.parse(await e.target.files[0].text());
+      if (!Array.isArray(s.items)) throw 0;
+      if (!confirm(`Replace your current list with ${s.items.length} items from the backup?`)) return;
+      state = { items: s.items, courseColors: s.courseColors || {} };
+      save(); render(); $('dlgMore').close(); toast('Restored');
+    } catch { toast('That file is not a homework backup'); }
+    e.target.value = '';
+  };
+  $('btnClearDone').onclick = () => {
+    const cutoff = Date.now() - 14 * 86400000; const before = state.items.length;
+    state.items = state.items.filter((i) => !(i.done && (i.doneAt || 0) < cutoff));
+    save(); render(); toast(`Removed ${before - state.items.length}`);
+  };
+
+  // Refresh labels when the day rolls over or the app comes back to the foreground.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+  render();
+  window.__hw = { parseText, parseCsv, findDate }; // for tests
+})();
+</script>
+</body>
+</html>
